@@ -75,6 +75,11 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
 
     new_devices = []
     for pet in fitracking.pets:
+        if getattr(pet, "device", None) is None:
+            LOGGER.warning(
+                "Skipping pet %s: no collar paired", getattr(pet, "name", "unknown")
+            )
+            continue
         try:
             new_devices.append(FiBatterySensor(hass, pet, coordinator))
             for statType in SENSOR_STATS_BY_TYPE:
@@ -119,12 +124,12 @@ class FiBaseSensor(CoordinatorEntity, SensorEntity):
     @property
     def name(self):
         """Return the name of the sensor."""
-        return f"{self.base.name}"
+        return f"{self.base.name} Base"
 
     @property
     def unique_id(self):
         """Return the ID of this sensor."""
-        return f"{self.base.baseId}"
+        return f"{self.base.baseId}-base"
 
     @property
     def baseId(self):

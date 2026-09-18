@@ -76,6 +76,11 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
 
     new_devices = []
     for pet in fitracking.pets:
+        if getattr(pet, "device", None) is None:
+            LOGGER.warning(
+                "Skipping pet %s: no collar paired", getattr(pet, "name", "unknown")
+            )
+            continue
         new_devices.append(FiPetLight(hass, pet, coordinator))
     if new_devices:
         async_add_devices(new_devices)

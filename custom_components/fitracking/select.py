@@ -1,7 +1,11 @@
+import logging
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+
+LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, config_entry, async_add_devices):
@@ -12,6 +16,11 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
 
     new_devices = []
     for pet in fitracking.pets:
+        if getattr(pet, "device", None) is None:
+            LOGGER.warning(
+                "Skipping pet %s: no collar paired", getattr(pet, "name", "unknown")
+            )
+            continue
         new_devices.append(FiLostMode(hass, pet, coordinator))
     if new_devices:
         async_add_devices(new_devices)
