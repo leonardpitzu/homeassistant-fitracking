@@ -1,7 +1,6 @@
 """Tests for the Fi Tracking sensor platform."""
 
 import pytest
-
 from homeassistant.components.sensor import SensorStateClass
 
 from custom_components.fitracking.const import (
