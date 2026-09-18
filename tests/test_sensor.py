@@ -2,6 +2,8 @@
 
 import pytest
 
+from homeassistant.components.sensor import SensorStateClass
+
 from custom_components.fitracking.const import (
     SENSOR_STATS_BY_TIME,
     SENSOR_STATS_BY_TYPE,
@@ -79,3 +81,18 @@ def test_icons_are_distinct():
 def test_every_stat_reports_a_state_class():
     """Without a state class there are no long-term statistics."""
     assert all(meta["state_class"] is not None for meta in STAT_META.values())
+
+
+@pytest.mark.parametrize("stat_type", ["SLEEP", "NAP"])
+def test_rest_stats_are_not_counters(stat_type):
+    """Fi moves minutes between nap and sleep, so these values can drop mid-day.
+
+    total_increasing would read that drop as a counter reset and inflate the sum.
+    """
+    assert STAT_META[stat_type]["state_class"] is SensorStateClass.MEASUREMENT
+
+
+@pytest.mark.parametrize("stat_type", ["STEPS", "DISTANCE"])
+def test_movement_stats_are_counters(stat_type):
+    """Movement only accumulates within a period and resets at the boundary."""
+    assert STAT_META[stat_type]["state_class"] is SensorStateClass.TOTAL_INCREASING

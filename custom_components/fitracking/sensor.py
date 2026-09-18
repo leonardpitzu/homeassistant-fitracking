@@ -44,7 +44,9 @@ STAT_META = {
         "divisor": 60,
         "precision": 0,
         "device_class": SensorDeviceClass.DURATION,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        # Not a counter: Fi reclassifies rest between nap and sleep, so the
+        # value can drop mid-day and total_increasing would see a false reset.
+        "state_class": SensorStateClass.MEASUREMENT,
     },
     "NAP": {
         "attr": "Nap",
@@ -53,7 +55,7 @@ STAT_META = {
         "divisor": 60,
         "precision": 0,
         "device_class": SensorDeviceClass.DURATION,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
     },
     "GOAL": {
         "attr": "Goal",
