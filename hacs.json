@@ -1,8 +1,5 @@
 {
-    "config_flow": true,
-    "documentation": "https://github.com/leonardpitzu/homeassistant-fitracking",
-    "domains": ["binary_sensor", "device_tracker", "light", "select", "sensor"],
-    "homeassistant": "2024.11.0",
-    "name": "Fi Tracking",
-    "render_readme": true
-  }
+  "name": "Fi Tracking",
+  "homeassistant": "2024.11.0",
+  "render_readme": true
+}
