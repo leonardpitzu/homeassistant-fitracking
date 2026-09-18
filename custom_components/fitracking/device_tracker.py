@@ -2,20 +2,8 @@ import logging
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
-from homeassistant.const import (
-    PERCENTAGE,
-    STATE_OK,
-    STATE_PROBLEM,
-    UnitOfLength,
-    UnitOfTime
-)
-from homeassistant.core import callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect, dispatcher_send
-from homeassistant.helpers.icon import icon_for_battery_level
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
 )
 
 from .const import DOMAIN
@@ -27,16 +15,16 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
     """Add sensors for passed config_entry in HA."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
 
-    tryfi = coordinator.data
+    fitracking = coordinator.data
 
     new_devices = []
-    for pet in tryfi.pets:
-        new_devices.append(TryFiPetTracker(async_add_devices, hass, pet, coordinator))
+    for pet in fitracking.pets:
+        new_devices.append(FiPetTracker(async_add_devices, hass, pet, coordinator))
     if new_devices:
         async_add_devices(new_devices, True)
 
 
-class TryFiPetTracker(CoordinatorEntity, TrackerEntity):
+class FiPetTracker(CoordinatorEntity, TrackerEntity):
     def __init__(self, see, hass, pet, coordinator):
         self._petId = pet.petId
         self._see = see
@@ -88,7 +76,7 @@ class TryFiPetTracker(CoordinatorEntity, TrackerEntity):
         return {
             "identifiers": {(DOMAIN, self.pet.petId)},
             "name": self.pet.name,
-            "manufacturer": "TryFi",
+            "manufacturer": "Fi",
             "model": self.pet.breed,
             "sw_version": self.pet.device.buildId,
         }

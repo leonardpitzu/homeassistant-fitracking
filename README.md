@@ -1,222 +1,104 @@
-# TryFi for Home Assistant
-![beta_badge](https://img.shields.io/badge/maturity-Beta-yellow.png?style=for-the-badge)
-[![](https://img.shields.io/github/release/sbabcock23/hass-tryfi/all.svg?style=for-the-badge)](https://github.com/sbabcock23/hass-tryfi/releases)
-![release_date](https://img.shields.io/github/release-date/sbabcock23/hass-tryfi.svg?style=for-the-badge)
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
-[![](https://img.shields.io/github/license/sbabcock23/hass-tryfi?style=for-the-badge)](LICENSE)
-[![](https://img.shields.io/github/workflow/status/sbabcock23/hass-tryfi/Validate%20with%20hassfest?style=for-the-badge)](https://github.com/sbabcock23/hass-tryfi/actions)
+# Fi Tracking for Home Assistant
 
-This allows you to integrate [TryFi](https://tryfi.com) Smart GPS Collars with Home Assistant.
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+
+A custom [Home Assistant](https://www.home-assistant.io/) integration for [Fi](https://fitracking.com/) smart GPS dog collars — live location, activity and rest tracking, collar light control and Lost Dog mode.
+
+> Personal fork of [sbabcock23/hass-tryfi](https://github.com/sbabcock23/hass-tryfi), renamed to follow Fi's rebrand from `tryfi.com` to `fitracking.com`. See [Differences from upstream](#differences-from-upstream).
 
 ## Features
-Current functionality includes:
-* Device Tracker - your pet will show up in HA using the GPS coordinates from the collar
-* Step Counter - it will report your pets daily, weekly, and monthly steps
-* Distance Counter - it will report your pets daily, weekly and monthly distance
-* Battery Level - it will report your Pet's collar battery level
-* Battery Charging - it will report if your Pet's collar is charging
-* Collar Light - you can control the light on the collar by turning it on and off and setting the color
-* Lost Dog Mode - allows you to select Lost mode if your dog if it is lost and select Safe if it is found
-* Bases - reports the status of the base (online/offline)
 
-## Donate
-If you would like to donate you can use my TryFi referral code "[395FX4](https://shop.tryfi.com/r/395FX4/?utm_source=referrals)" on your next purchase.
+### Device tracker
 
-# Installation
-## Pre-Requisities
-* Home Assistant >= 2023.1.0
-* TryFi dog collar with active cellular subscription
-* [HACS](https://github.com/custom-components/hacs) is already installed
+A `device_tracker` entity per pet, fed by the collar's reported GPS fix, so the pet appears on the map and can back a `person` entity.
 
-## Installation Methods
+### Sensors
 
-### HACS Install
-1. Search for `TryFi` under `Integrations` in the HACS Store tab.
-2. Add the [Integration](#configuration) to your HA and configure.
+Activity and rest statistics are created for every combination of period (`daily`, `weekly`, `monthly`) and metric:
 
-### Manual Install
-1. In your `/config` directory, create a `custom_components` folder if one does not exist.
-2. Copy the [tryfi](https://github.com/sbabcock23/hass-tryfi/tree/master/custom_components) folder and all of it's contents to your `custom_components` directory.
+| Metric | Unit | Device class | State class |
+|---|---|---|---|
+| Steps | `steps` | – | `total_increasing` |
+| Distance | `km` | `distance` | `total_increasing` |
+| Sleep | `min` | `duration` | `total_increasing` |
+| Nap | `min` | `duration` | `total_increasing` |
+| Goal | `steps` | – | `measurement` |
+
+Plus, per pet: collar battery level (`%`, `battery`), activity type, current place name, current place address, and the current connection source. Each Fi Base reports `Online` / `Offline`.
+
+Because every statistic carries a state class, they are recorded as **long-term statistics** and can be charted over months.
+
+### Binary sensor
+
+Collar battery charging state, with the `battery_charging` device class.
+
+### Light
+
+The collar LED is exposed as a `light` entity. Fi supports a fixed palette — red, green, blue, light blue, purple, yellow and white — and the closest match to the requested colour is used.
+
+### Select
+
+Lost Dog mode is a `select` entity with `Safe` and `Lost` options.
+
+## Installation
+
+### HACS (recommended)
+
+1. In HACS, add this repository as a **custom repository** with category **Integration**.
+2. Search for **Fi Tracking** and download it.
 3. Restart Home Assistant.
-4. Add the [Integration](#configuration) to your HA and configure.
+
+### Manual
+
+1. Copy `custom_components/fitracking` into your Home Assistant `custom_components` directory.
+2. Restart Home Assistant.
 
 ## Configuration
-1. After installing TryFi go to Configuration --> Integrations and add a new Integration
-2. Search for TryFi
-3. Enter in your TryFi username and password. Optionally you can select a polling frequency option (in seconds). Suggestion is nothing less then 5.
-4. Click Submit
 
-![Setup](https://github.com/sbabcock23/hass-tryfi/blob/master/docs/setup.jpg?raw=true)
+Add the integration from **Settings → Devices & Services → Add Integration → Fi Tracking**, then supply:
 
-## Validation
-Once you have added the integration, you will see 1 or more devices and entities associated with this integration. To validate its accuracy, you can review the steps and distance counters for your pet or its current whereabouts.
+| Field | Description |
+|---|---|
+| Username | The e-mail address of your Fi account |
+| Password | Your Fi account password |
+| Polling | Seconds between updates (default `10`, minimum `1`) |
 
-![Integration](https://github.com/sbabcock23/hass-tryfi/blob/master/docs/tryfiaftersetup.jpg?raw=true)
+The polling rate can be changed later from the integration's **Configure** dialog; the entry reloads automatically so the new value takes effect immediately.
 
-### Dog Device and Entities
-#### Device
+An active Fi membership is required — the collar reports nothing without one.
 
-![Dog Device](https://github.com/sbabcock23/hass-tryfi/blob/master/docs/dogdevice.jpg?raw=true)
+## Connection sources
 
-#### Entities
+The collar picks the cheapest transport available and the `Connected To` sensor reports which one is in use:
 
-![Dog Entities](https://github.com/sbabcock23/hass-tryfi/blob/master/docs/dogentities.jpg?raw=true)
+| State | Meaning |
+|---|---|
+| `ConnectedToBase` | In Bluetooth range of a Fi Base — lowest power |
+| `ConnectedToUser` | In Bluetooth range of a phone running the Fi app |
+| `ConnectedToCellular` | Reporting over LTE-M, GPS active — highest power |
+| `Unknown` | Offline |
 
-### Base Device and Entities
+A collar sitting on `ConnectedToCellular` while at home usually means the Base is out of Bluetooth range.
 
-![Base Device and Entities](https://github.com/sbabcock23/hass-tryfi/blob/master/docs/dogbase.jpg?raw=true)
+## Differences from upstream
 
-# How to Use
-## Light Collar
-The light on your Pet's collar is represented as a light switch in HA. It can either be turned on or off.
-The color can be set. The collar only supports Red, Green, Blue, LightBlue, Purple, Yellow, and White. The closest color to your selection will be used.
+| Change | Why |
+|---|---|
+| Domain renamed `tryfi` → `fitracking` | Matches Fi's rebrand to fitracking.com |
+| Goal sensors added | Upstream left `# FUTURE COULD INCLUDE STEP GOAL`; `pytryfi` already exposed the values |
+| Migrated to `SensorEntity` | Entities inherited plain `Entity`, so no `state_class` was possible and no long-term statistics were recorded |
+| Per-metric icons | Every statistic returned `mdi:map-marker-distance`, sleep included |
+| Device classes and display precision | Distance, duration and battery now render natively |
+| Options flow fixed | `OptionsFlow.config_entry` is read-only from HA 2024.11, so the dialog crashed ([#113](https://github.com/sbabcock23/hass-tryfi/issues/113), [#114](https://github.com/sbabcock23/hass-tryfi/pull/114)) |
+| Polling rate honoured | Setup read `entry.data` while the options flow wrote `entry.options`, so changes did nothing |
+| Resilient entity setup | One malformed pet or base aborted the whole platform ([#112](https://github.com/sbabcock23/hass-tryfi/pull/112), [#93](https://github.com/sbabcock23/hass-tryfi/issues/93)) |
+| Modern platform unload | Replaced the deprecated `async_forward_entry_unload` loop |
 
-![Lovelace](https://github.com/sbabcock23/hass-tryfi/blob/master/docs/doglight.jpg?raw=true)
+## Credits
 
-## Lost Dog Mode
-TryFi is equiped with a "Lost Dog Mode" functionality. In HA this is represented by a select entity.
-Select Lost if your pet is lost or Safe if your pet is OK.
+Original integration by [@sbabcock23](https://github.com/sbabcock23), built on the
+[pytryfi](https://github.com/sbabcock23/pytryfi) library. This fork is not affiliated with Fi.
 
-![Lovelace](https://github.com/sbabcock23/hass-tryfi/blob/master/docs/doglostmode.png?raw=true)
+## License
 
-# Lovelace
-
-## Entities
-```
-type: entities
-entities:
-  - entity: select.harley_lost_state
-  - entity: sensor.harley_collar_battery_level
-  - entity: binary_sensor.harley_collar_battery_charging
-  - entity: sensor.home_base
-  - entity: sensor.harley_daily_steps
-  - entity: sensor.harley_weekly_steps
-  - entity: sensor.harley_monthly_steps
-  - entity: sensor.harley_daily_distance
-  - entity: sensor.harley_weekly_distance
-  - entity: sensor.harley_monthly_distance
-  - entity: sensor.harley_daily_sleep
-  - entity: sensor.harley_weekly_sleep
-  - entity: sensor.harley_monthly_sleep
-  - entity: sensor.harley_daily_nap
-  - entity: sensor.harley_weekly_nap
-  - entity: sensor.harley_monthly_nap
-```
-## Light
-```
-type: light
-entity: light.harley_collar_light
-```
-
-# Automation Examples
-## Turn on the Collar Light After Dark
-Turns on the collar light after dark if the pet is not home.
-```
-- id: '1604060166498'
-  alias: Turn on Light After Dark If Not Home
-  description: ''
-  trigger:
-  - platform: sun
-    event: sunset
-  condition:
-  - condition: and
-    conditions:
-    - condition: device
-      device_id: a7237a6c1144fcd90828b21de2572603
-      domain: device_tracker
-      entity_id: device_tracker.pet_tracker
-      type: is_not_home
-  action:
-  - type: turn_on
-    device_id: a7237a6c1144fcd90828b21de2572603
-    entity_id: light.pet_collar_light
-    domain: light
-  mode: single
-```
-## Fully Charged Notification
-Sends notification when battery has charged to 100%.
-```
-- id: '1661129896868'
-  alias: Pet's Collar - Fully Charged
-  description: ''
-  trigger:
-  - platform: state
-    entity_id:
-    - sensor.pet_collar_battery_level
-    to: '100'
-    for:
-      hours: 0
-      minutes: 0
-      seconds: 0
-  condition:
-  - condition: state
-    entity_id: binary_sensor.pet_collar_battery_charging
-    state: 'on'
-  action:
-  - service: notify.everyone_phone
-    data:
-      message: Pet's collar is fully charged!
-  mode: single
-```
-# Known Issues
-* It sometimes takes time for the status to accurately refresh in HA. For example the light on/off status and the Lost Mode select status.
-
-# Future Enhacements
-* Allow for the selection of the LED light color
-* Enable possibility of if pet not home and not with owner then trigger lost dog mode
-
-# Version History
-## 0.0.24 
-* updated deprecated classes
-## 0.0.23
-* Added support for dynamic lighting choices. 
-## 0.0.22
-* Added support for changing the color of the colar's LED light. This is currently based on a pre-defined set of colors.
-## 0.0.21
-* Version bump of pytry package
-## 0.0.20
-* Fix - Due to recent changes by TryFi, additional changes were required in the pytryfi library. Bumping version to include those changes/fixes.
-## 0.0.19
-* Fix - pets without collars were causing errors.
-## 0.0.18
-* Enhancement - Battery Charging - it will report if your Pet's collar is charging
-## 0.0.17
-* Enhancement - added the attribute ConnectedTo which will determine if the pet is connected to a person, base, etc.
-* Fix - base data was not updating. This issue is resolved.
-## 0.0.16
-* Enhancement - requested to add the attributes Activity Type, Current Place Name and Current Place Address.
-## 0.0.15
-* Version bump to support latest pytryfi version 0.0.16 that includes multiple households
-## 0.0.14
-* Fix - fixed sleep and nap units from hours to minutes with proper conversion
-## 0.0.13
-* Enhancement - Added Sleep and Nap "sensors"/attributes based on new version of pytryfi
-## 0.0.12
-* Fix - Issue where base status (online/offline) was not set correctly.
-## 0.0.11
-* Version bump to support latest pytryfi version 0.0.14.1
-## 0.0.10
-* Lost Mode is now a select entity instead of a lock entity
-## 0.0.9
-* Updated dependency version of pytryfi
-* Fixed [Issue #30](https://github.com/sbabcock23/hass-tryfi/issues/30) - Convert to Async
-## 0.0.8
-* Updating dependency version of pytryfi
-## 0.0.7
-* Updating dependency version of pytryfi
-## 0.0.6
-* Steps unit was added to enable charting of dogs steps over time.
-## 0.0.5
-* Fixed [Issue #15](https://github.com/sbabcock23/hass-tryfi/issues/15) - dependency update
-## 0.0.4
-* Fixed [Issue #17](https://github.com/sbabcock23/hass-tryfi/issues/17) - converted to async
-## 0.0.3
-* Multiple bases fix
-## 0.0.2
-* Documentation updates
-## 0.0.1
-* Initial Release with basic functionality including light on/off, device tracker, lock mode of dog and general stats
-
-# Links
-* [Python TryFi Interface](https://github.com/sbabcock23/pytryfi)
-* [TryFi]((https://tryfi.com/))
+[Apache-2.0](LICENSE)

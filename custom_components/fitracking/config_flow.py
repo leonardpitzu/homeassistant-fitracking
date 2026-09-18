@@ -38,18 +38,19 @@ DATA_SCHEMA = vol.Schema(
 
 async def validate_input(hass: core.HomeAssistant, data: dict):
     try:
-        pollingInt = int(data[CONF_POLLING_RATE])
-        if pollingInt < 1:
+        if int(data[CONF_POLLING_RATE]) < 1:
             raise InvalidPolling
-    except:
-        raise InvalidPolling
-    try:
-        #tryfi = PyTryFi(username=data[CONF_USERNAME], password=data[CONF_PASSWORD])
-        tryfi = await hass.async_add_executor_job(PyTryFi, data[CONF_USERNAME], data[CONF_PASSWORD])
-    except:
-        raise CannotConnect
+    except (TypeError, ValueError) as err:
+        raise InvalidPolling from err
 
-    info = await async_connect_or_timeout(hass, tryfi)
+    try:
+        fitracking = await hass.async_add_executor_job(
+            PyTryFi, data[CONF_USERNAME], data[CONF_PASSWORD]
+        )
+    except Exception as err:
+        raise CannotConnect from err
+
+    await async_connect_or_timeout(hass, fitracking)
 
     return {"title": data[CONF_USERNAME]}
 
@@ -68,7 +69,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
@@ -101,33 +102,34 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options."""
 
-    def __init__(self, config_entry):
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
     async def async_step_init(self, user_input=None):
         """Manage the options."""
+        errors = {}
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            try:
+                if int(user_input[CONF_POLLING_RATE]) < 1:
+                    raise InvalidPolling
+            except (TypeError, ValueError, InvalidPolling):
+                errors["base"] = "invalid_polling"
+            else:
+                return self.async_create_entry(title="", data=user_input)
 
+        # Fall back to the value captured at setup so the form shows what is
+        # actually in effect rather than the module default.
+        current = self.config_entry.options.get(
+            CONF_POLLING_RATE,
+            self.config_entry.data.get(CONF_POLLING_RATE, DEFAULT_POLLING_RATE),
+        )
         return self.async_show_form(
             step_id="init",
+            errors=errors,
             data_schema=vol.Schema(
                 {
-                    vol.Optional(
-                        CONF_POLLING_RATE,
-                        default=self.config_entry.options.get(
-                            CONF_POLLING_RATE, DEFAULT_POLLING_RATE
-                        ),
-                    ): str,
+                    vol.Optional(CONF_POLLING_RATE, default=str(current)): str,
                 }
             ),
         )
 
 
 class InvalidPolling(exceptions.HomeAssistantError):
-    """Error to indicate we cannot use the polling rate"""
-
-
-class CannotConnect(exceptions.HomeAssistantError):
     """Error to indicate we cannot use the polling rate"""

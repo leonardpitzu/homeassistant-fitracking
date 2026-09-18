@@ -1,9 +1,6 @@
 import logging
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity
-)
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -14,16 +11,16 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
     """Add binary sensors for passed config_entry in HA."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
 
-    tryfi = coordinator.data
+    fitracking = coordinator.data
 
     new_devices = []
-    for pet in tryfi.pets:
+    for pet in fitracking.pets:
         LOGGER.debug(f"Adding Pet Battery Charging Binary Sensor: {pet}")
-        new_devices.append(TryFiBatteryChargingBinarySensor(hass, pet, coordinator))
+        new_devices.append(FiBatteryChargingBinarySensor(hass, pet, coordinator))
     if new_devices:
         async_add_devices(new_devices)
 
-class TryFiBatteryChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class FiBatteryChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Representation of a Binary Sensor."""
 
     def __init__(self, hass, pet, coordinator):
@@ -84,7 +81,7 @@ class TryFiBatteryChargingBinarySensor(CoordinatorEntity, BinarySensorEntity):
         return {
             "identifiers": {(DOMAIN, self.pet.petId)},
             "name": self.pet.name,
-            "manufacturer": "TryFi",
+            "manufacturer": "Fi",
             "model": self.pet.breed,
             "sw_version": self.pet.device.buildId,
         }

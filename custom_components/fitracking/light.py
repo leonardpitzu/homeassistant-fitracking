@@ -1,10 +1,10 @@
 import logging
+import math
 
-from homeassistant.components.light import LightEntity, ColorMode
+from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
-import math
 
 from .const import DOMAIN
 
@@ -41,7 +41,7 @@ def calculate_distance(color1, color2):
     Returns:
     - float: The Euclidean distance between the two RGB colors.
     """
-    return math.sqrt(sum((c1 - c2) ** 2 for c1, c2 in zip(color1, color2)))
+    return math.sqrt(sum((c1 - c2) ** 2 for c1, c2 in zip(color1, color2, strict=True)))
 
 def find_closest_color_code(target_color , color_list):
     """
@@ -55,7 +55,6 @@ def find_closest_color_code(target_color , color_list):
     - int: The color code for this device closest to the target color
     """
     min_distance = float('inf')
-    closest_color = None  # type: Tuple[int, int, int]
     # default to white, which is 8
     closest_color_code = 8 # type: int
 
@@ -73,16 +72,16 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
     """Add sensors for passed config_entry in HA."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
 
-    tryfi = coordinator.data
+    fitracking = coordinator.data
 
     new_devices = []
-    for pet in tryfi.pets:
-        new_devices.append(TryFiPetLight(hass, pet, coordinator))
+    for pet in fitracking.pets:
+        new_devices.append(FiPetLight(hass, pet, coordinator))
     if new_devices:
         async_add_devices(new_devices)
 
 
-class TryFiPetLight(CoordinatorEntity, LightEntity):
+class FiPetLight(CoordinatorEntity, LightEntity):
     def __init__(self, hass, pet, coordinator):
         self._petId = pet.petId
         self._hass = hass
@@ -104,7 +103,7 @@ class TryFiPetLight(CoordinatorEntity, LightEntity):
         return self.coordinator.data.getPet(self.petId)
 
     @property
-    def tryfi(self):
+    def fitracking(self):
         return self.coordinator.data
 
     @property
@@ -136,14 +135,14 @@ class TryFiPetLight(CoordinatorEntity, LightEntity):
         return {
             "identifiers": {(DOMAIN, self.pet.petId)},
             "name": self.pet.name,
-            "manufacturer": "TryFi",
+            "manufacturer": "Fi",
             "model": self.pet.breed,
             "sw_version": self.pet.device.buildId,
         }
 
     # Fix later, request update
     def turn_on(self, **kwargs):
-        self.pet.turnOnOffLed(self.tryfi.session, True)
+        self.pet.turnOnOffLed(self.fitracking.session, True)
 
         if "rgb_color" in kwargs:
             # This is set when the color is changed
@@ -151,8 +150,8 @@ class TryFiPetLight(CoordinatorEntity, LightEntity):
             requested_color = kwargs["rgb_color"]
             closest_color_code = find_closest_color_code(requested_color, self._colorMap)
 
-            self.pet.setLedColorCode(self.tryfi.session, closest_color_code)
+            self.pet.setLedColorCode(self.fitracking.session, closest_color_code)
             self.lastKnownColor = self._colorMap[closest_color_code]
 
     def turn_off(self, **kwargs):
-        self.pet.turnOnOffLed(self.tryfi.session, False)
+        self.pet.turnOnOffLed(self.fitracking.session, False)

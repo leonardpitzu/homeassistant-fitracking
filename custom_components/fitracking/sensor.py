@@ -1,60 +1,114 @@
 """Platform for sensor integration."""
 import logging
 
-from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.const import (
-    PERCENTAGE,
-    STATE_OK,
-    STATE_PROBLEM,
-    UnitOfLength,
-    UnitOfTime
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
 )
-from homeassistant.core import callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect, dispatcher_send
-from homeassistant.helpers.entity import Entity
+from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfTime
 from homeassistant.helpers.icon import icon_for_battery_level
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
 )
 
 from .const import DOMAIN, SENSOR_STATS_BY_TIME, SENSOR_STATS_BY_TYPE
 
 LOGGER = logging.getLogger(__name__)
 
+# Per-stat metadata. "attr" is suffixed onto the period to build the pytryfi
+# attribute name, e.g. "daily" + "TotalDistance" -> pet.dailyTotalDistance.
+STAT_META = {
+    "STEPS": {
+        "attr": "Steps",
+        "icon": "mdi:shoe-print",
+        "unit": "steps",
+        "divisor": 1,
+        "precision": 0,
+        "device_class": None,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "DISTANCE": {
+        "attr": "TotalDistance",
+        "icon": "mdi:map-marker-distance",
+        "unit": UnitOfLength.KILOMETERS,
+        "divisor": 1000,
+        "precision": 2,
+        "device_class": SensorDeviceClass.DISTANCE,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "SLEEP": {
+        "attr": "Sleep",
+        "icon": "mdi:sleep",
+        "unit": UnitOfTime.MINUTES,
+        "divisor": 60,
+        "precision": 0,
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "NAP": {
+        "attr": "Nap",
+        "icon": "mdi:power-sleep",
+        "unit": UnitOfTime.MINUTES,
+        "divisor": 60,
+        "precision": 0,
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+    },
+    "GOAL": {
+        "attr": "Goal",
+        "icon": "mdi:target",
+        "unit": "steps",
+        "divisor": 1,
+        "precision": 0,
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+}
+
 
 async def async_setup_entry(hass, config_entry, async_add_devices):
     """Add sensors for passed config_entry in HA."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
 
-    tryfi = coordinator.data
+    fitracking = coordinator.data
 
     new_devices = []
-    for pet in tryfi.pets:
-        LOGGER.debug(f"Adding Pet Battery Sensor: {pet}")
-        new_devices.append(TryFiBatterySensor(hass, pet, coordinator))
-        for statType in SENSOR_STATS_BY_TYPE:
-            for statTime in SENSOR_STATS_BY_TIME:
-                LOGGER.debug(f"Adding Pet Stat: {pet}")
-                new_devices.append(
-                    PetStatsSensor(hass, pet, coordinator, statType, statTime)
-                )
-        LOGGER.debug(f"Adding Pet Generic Sensor: {pet}")
-        new_devices.append(PetGenericSensor(hass, pet, coordinator, "Activity Type"))
-        new_devices.append(PetGenericSensor(hass, pet, coordinator, "Current Place Name"))
-        new_devices.append(PetGenericSensor(hass, pet, coordinator, "Current Place Address"))
-        new_devices.append(PetGenericSensor(hass, pet, coordinator, "Connected To"))
+    for pet in fitracking.pets:
+        try:
+            new_devices.append(FiBatterySensor(hass, pet, coordinator))
+            for statType in SENSOR_STATS_BY_TYPE:
+                for statTime in SENSOR_STATS_BY_TIME:
+                    new_devices.append(
+                        PetStatsSensor(hass, pet, coordinator, statType, statTime)
+                    )
+            for generic in (
+                "Activity Type",
+                "Current Place Name",
+                "Current Place Address",
+                "Connected To",
+            ):
+                new_devices.append(PetGenericSensor(hass, pet, coordinator, generic))
+        except Exception:
+            # One malformed pet must not block registration for the others.
+            LOGGER.exception(
+                "Skipping sensors for pet %s", getattr(pet, "petId", "unknown")
+            )
         
 
-    for base in tryfi.bases:
-        LOGGER.debug(f"Adding Base: {base}")
-        new_devices.append(TryFiBaseSensor(hass, base, coordinator))
+    for base in fitracking.bases:
+        try:
+            new_devices.append(FiBaseSensor(hass, base, coordinator))
+        except Exception:
+            # One malformed base must not block registration for the others.
+            LOGGER.exception(
+                "Skipping base %s", getattr(base, "baseId", "unknown")
+            )
     if new_devices:
         async_add_devices(new_devices)
 
 
-class TryFiBaseSensor(CoordinatorEntity, Entity):
+class FiBaseSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, hass, base, coordinator):
         self._hass = hass
         self._baseId = base.baseId
@@ -90,7 +144,7 @@ class TryFiBaseSensor(CoordinatorEntity, Entity):
         return None
 
     @property
-    def state(self):
+    def native_value(self):
         if self.base.online:
             return "Online"
         else:
@@ -105,12 +159,12 @@ class TryFiBaseSensor(CoordinatorEntity, Entity):
         return {
             "identifiers": {(DOMAIN, self.base.baseId)},
             "name": self.base.name,
-            "manufacturer": "TryFi",
-            "model": "TryFi Base",
+            "manufacturer": "Fi",
+            "model": "Fi Base",
             # "sw_version": self.pet.device.buildId,
         }
 
-class PetGenericSensor(CoordinatorEntity, Entity):
+class PetGenericSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Sensor."""
 
     def __init__(self, hass, pet, coordinator, statType):
@@ -164,14 +218,14 @@ class PetGenericSensor(CoordinatorEntity, Entity):
         if self.statType == "Activity Type":
             return "mdi:run"
         elif self.statType == "Current Place Name":
-            return "mdi:earth"
+            return "mdi:map-marker-radius"
         elif self.statType == "Current Place Address":
             return "mdi:map-marker"
         elif self.statType == "Connected To":
             return "mdi:human-greeting-proximity"
 
     @property
-    def state(self):
+    def native_value(self):
         if self.statType == "Activity Type":
             return self.pet.getActivityType()
         elif self.statType == "Current Place Name":
@@ -180,8 +234,6 @@ class PetGenericSensor(CoordinatorEntity, Entity):
             return self.pet.getCurrPlaceAddress()
         elif self.statType == "Connected To":
             return self.pet.device.connectionStateType
-    @property
-    def unit_of_measurement(self):
         return None
 
     @property
@@ -189,12 +241,12 @@ class PetGenericSensor(CoordinatorEntity, Entity):
         return {
             "identifiers": {(DOMAIN, self.pet.petId)},
             "name": self.pet.name,
-            "manufacturer": "TryFi",
+            "manufacturer": "Fi",
             "model": self.pet.breed,
             "sw_version": self.pet.device.buildId,
         }
 
-class PetStatsSensor(CoordinatorEntity, Entity):
+class PetStatsSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Sensor."""
 
     def __init__(self, hass, pet, coordinator, statType, statTime):
@@ -239,71 +291,52 @@ class PetStatsSensor(CoordinatorEntity, Entity):
         return self.unique_id
 
     @property
+    def _meta(self):
+        return STAT_META[self.statType.upper()]
+
+    @property
     def device_class(self):
         """Return the device class of the sensor."""
-        return None
+        return self._meta["device_class"]
+
+    @property
+    def state_class(self):
+        """Counters reset each period; the goal is a target, not a counter."""
+        return self._meta["state_class"]
+
+    @property
+    def suggested_display_precision(self):
+        return self._meta["precision"]
 
     @property
     def icon(self):
-        return "mdi:map-marker-distance"
+        return self._meta["icon"]
 
     @property
-    def state(self):
-        if self.statType.upper() == "STEPS":
-            if self.statTime.upper() == "DAILY":
-                return self.pet.dailySteps
-            elif self.statTime.upper() == "WEEKLY":
-                return self.pet.weeklySteps
-            elif self.statTime.upper() == "MONTHLY":
-                return self.pet.monthlySteps
-        elif self.statType.upper() == "DISTANCE":
-            if self.statTime.upper() == "DAILY":
-                return round(self.pet.dailyTotalDistance / 1000, 2)
-            elif self.statTime.upper() == "WEEKLY":
-                return round(self.pet.weeklyTotalDistance / 1000, 2)
-            elif self.statTime.upper() == "MONTHLY":
-                return round(self.pet.monthlyTotalDistance / 1000, 2)
-        elif self.statType.upper() == "NAP":
-            if self.statTime.upper() == "DAILY":
-                return round(self.pet.dailyNap / 60, 2)
-            elif self.statTime.upper() == "WEEKLY":
-                return round(self.pet.weeklyNap / 60, 2)
-            elif self.statTime.upper() == "MONTHLY":
-                return round(self.pet.monthlyNap / 60, 2)
-        elif self.statType.upper() == "SLEEP":
-            if self.statTime.upper() == "DAILY":
-                return round(self.pet.dailySleep / 60, 2)
-            elif self.statTime.upper() == "WEEKLY":
-                return round(self.pet.weeklySleep / 60, 2)
-            elif self.statTime.upper() == "MONTHLY":
-                return round(self.pet.monthlySleep / 60, 2)
-        else:
+    def native_value(self):
+        meta = self._meta
+        raw = getattr(self.pet, f"{self.statTime.lower()}{meta['attr']}", None)
+        if raw is None:
             return None
+        return raw if meta["divisor"] == 1 else round(raw / meta["divisor"], 2)
 
     @property
-    def unit_of_measurement(self):
+    def native_unit_of_measurement(self):
         """Return the unit_of_measurement of the device."""
-        if self.statType.upper() == "DISTANCE":
-            return UnitOfLength.KILOMETERS
-        elif self.statType.upper() == "SLEEP":
-            return UnitOfTime.MINUTES
-        elif self.statType.upper() == "NAP":
-            return UnitOfTime.MINUTES
-        else:
-            return "steps"
+        return self._meta["unit"]
 
     @property
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.pet.petId)},
             "name": self.pet.name,
-            "manufacturer": "TryFi",
+            "manufacturer": "Fi",
             "model": self.pet.breed,
             "sw_version": self.pet.device.buildId,
         }
 
 
-class TryFiBatterySensor(CoordinatorEntity, Entity):
+class FiBatterySensor(CoordinatorEntity, SensorEntity):
     """Representation of a Sensor."""
 
     def __init__(self, hass, pet, coordinator):
@@ -343,7 +376,12 @@ class TryFiBatterySensor(CoordinatorEntity, Entity):
         return SensorDeviceClass.BATTERY
 
     @property
-    def unit_of_measurement(self):
+    def state_class(self):
+        """Return the state class of the sensor."""
+        return SensorStateClass.MEASUREMENT
+
+    @property
+    def native_unit_of_measurement(self):
         """Return the unit_of_measurement of the device."""
         return PERCENTAGE
 
@@ -364,7 +402,7 @@ class TryFiBatterySensor(CoordinatorEntity, Entity):
         return self.pet.device.batteryPercent
 
     @property
-    def state(self):
+    def native_value(self):
         return self.batteryPercent
 
     @property
@@ -372,7 +410,7 @@ class TryFiBatterySensor(CoordinatorEntity, Entity):
         return {
             "identifiers": {(DOMAIN, self.pet.petId)},
             "name": self.pet.name,
-            "manufacturer": "TryFi",
+            "manufacturer": "Fi",
             "model": self.pet.breed,
             "sw_version": self.pet.device.buildId,
         }
