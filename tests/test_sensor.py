@@ -7,7 +7,7 @@ from custom_components.fitracking.const import (
     SENSOR_STATS_BY_TIME,
     SENSOR_STATS_BY_TYPE,
 )
-from custom_components.fitracking.sensor import STAT_META
+from custom_components.fitracking.sensor import STAT_META, PetBehaviorSensor
 
 # Stat attribute names pytryfi exposes on a pet object.
 PYTRYFI_STAT_ATTRS = {
@@ -82,16 +82,14 @@ def test_every_stat_reports_a_state_class():
     assert all(meta["state_class"] is not None for meta in STAT_META.values())
 
 
-@pytest.mark.parametrize("stat_type", ["SLEEP", "NAP"])
-def test_rest_stats_are_not_counters(stat_type):
-    """Fi moves minutes between nap and sleep, so these values can drop mid-day.
+def test_no_sensor_is_a_counter():
+    """Fi revises these downward after first reporting them.
 
-    total_increasing would read that drop as a counter reset and inflate the sum.
+    HA's reset tolerance is relative, so a small absolute revision early in a
+    period is a large enough drop to read as a counter reset and inflate the sum.
     """
-    assert STAT_META[stat_type]["state_class"] is SensorStateClass.MEASUREMENT
-
-
-@pytest.mark.parametrize("stat_type", ["STEPS", "DISTANCE"])
-def test_movement_stats_are_counters(stat_type):
-    """Movement only accumulates within a period and resets at the boundary."""
-    assert STAT_META[stat_type]["state_class"] is SensorStateClass.TOTAL_INCREASING
+    state_classes = [meta["state_class"] for meta in STAT_META.values()]
+    # HA's entity metaclass turns _attr_state_class into a descriptor, so the
+    # value only resolves through the public property on an instance.
+    state_classes.append(object.__new__(PetBehaviorSensor).state_class)
+    assert all(state_class is SensorStateClass.MEASUREMENT for state_class in state_classes)

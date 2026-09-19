@@ -18,6 +18,9 @@ LOGGER = logging.getLogger(__name__)
 
 # Per-stat metadata. "attr" is suffixed onto the period to build the pytryfi
 # attribute name, e.g. "daily" + "TotalDistance" -> pet.dailyTotalDistance.
+# Nothing here is total_increasing: Fi revises these downward after first
+# reporting them, and HA's 10% reset tolerance is relative, so a small absolute
+# revision early in a period reads as a counter reset.
 STAT_META = {
     "STEPS": {
         "attr": "Steps",
@@ -26,7 +29,7 @@ STAT_META = {
         "divisor": 1,
         "precision": 0,
         "device_class": None,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
     },
     "DISTANCE": {
         "attr": "TotalDistance",
@@ -35,7 +38,7 @@ STAT_META = {
         "divisor": 1000,
         "precision": 2,
         "device_class": SensorDeviceClass.DISTANCE,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
     },
     "SLEEP": {
         "attr": "Sleep",
@@ -44,8 +47,8 @@ STAT_META = {
         "divisor": 60,
         "precision": 0,
         "device_class": SensorDeviceClass.DURATION,
-        # Not a counter: Fi reclassifies rest between nap and sleep, so the
-        # value can drop mid-day and total_increasing would see a false reset.
+        # Fi also reclassifies rest between nap and sleep, moving minutes
+        # between these two after they were first reported.
         "state_class": SensorStateClass.MEASUREMENT,
     },
     "NAP": {
@@ -260,10 +263,10 @@ class PetGenericSensor(CoordinatorEntity, SensorEntity):
 class PetBehaviorSensor(CoordinatorEntity, SensorEntity):
     """Count of Fi-detected behaviour events today, with their times attached."""
 
-    # Resets to 0 at local midnight, which total_increasing handles. Fi has been
-    # seen reclassifying rest data after the fact; if a count ever drops mid-day
-    # this should become MEASUREMENT.
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    # Resets to 0 at local midnight like every other daily stat, and Fi revises
+    # its counts, so this is not total_increasing either. For a per-day view,
+    # chart the daily max.
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "events"
 
     def __init__(self, hass, pet, coordinator, behavior):

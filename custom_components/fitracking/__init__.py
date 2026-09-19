@@ -22,12 +22,25 @@ from .const import (
 
 LOGGER = logging.getLogger(__name__)
 
+# pytryfi 0.0.21 logs this at WARNING every time the pet is not inside one of
+# Fi's saved places, which is most polls. Fixed upstream but unreleased.
+_PYTRYFI_PLACE_LOGGER = "pytryfi.fiPet"
+_PYTRYFI_PLACE_MESSAGE = "Could not set place, defaulting to Unknown"
+
+
+def _drop_place_warning(record: logging.LogRecord) -> bool:
+    return record.getMessage() != _PYTRYFI_PLACE_MESSAGE
+
 
 # Setup is config-entry only; async_setup_entry seeds hass.data itself.
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    pytryfi_logger = logging.getLogger(_PYTRYFI_PLACE_LOGGER)
+    pytryfi_logger.addFilter(_drop_place_warning)
+    entry.async_on_unload(lambda: pytryfi_logger.removeFilter(_drop_place_warning))
+
     fitracking = await hass.async_add_executor_job(PyTryFi,entry.data["username"], entry.data["password"])
 
     # Exceptions are swallowed in the PyTryFi library, so we must assert a

@@ -18,19 +18,28 @@ Activity and rest statistics are created for every combination of period (`daily
 
 | Metric | Unit | Device class | State class |
 |---|---|---|---|
-| Steps | `steps` | – | `total_increasing` |
-| Distance | `km` | `distance` | `total_increasing` |
+| Steps | `steps` | – | `measurement` |
+| Distance | `km` | `distance` | `measurement` |
 | Sleep | `min` | `duration` | `measurement` |
 | Nap | `min` | `duration` | `measurement` |
 | Goal | `steps` | – | `measurement` |
 
-Sleep and nap are `measurement` rather than `total_increasing` because Fi
-reclassifies rest between the two after the fact, so the value can drop mid-day
-and a counter would read that as a reset.
+None of these are `total_increasing`. Every value does reset at the start of its
+period, but Fi also revises them downward after first reporting them, and Home
+Assistant's 10% reset tolerance is relative — so a 30 m correction to a 50 m
+morning walk reads as a counter reset and adds a phantom cycle to the sum.
 
 Plus, per pet: collar battery level (`%`, `battery`), activity type, current place name, current place address, and the current connection source. Each Fi Base reports `Online` / `Offline`.
 
-Because every statistic carries a state class, they are recorded as **long-term statistics** and can be charted over months.
+Because every statistic carries a state class, they are recorded as **long-term statistics** and can be charted over months. For a per-day view, chart the daily `max`:
+
+```yaml
+type: statistics-graph
+entities: [sensor.scottie_daily_distance]
+period: day
+stat_types: [max]
+chart_type: bar
+```
 
 ### Behaviour sensors
 
@@ -53,7 +62,8 @@ events: ["2026-09-19T01:27:28+03:00", "2026-09-19T01:29:52+03:00"]
 last_event: "2026-09-19T01:29:52+03:00"
 ```
 
-The counts reset at local midnight. `pytryfi` does not implement this data; it is
+The counts reset at local midnight and use `measurement` for the same reason as
+the activity statistics above. `pytryfi` does not implement this data; it is
 fetched directly from Fi's `getPetHealthTrendsForPet` query.
 
 ### Binary sensor
