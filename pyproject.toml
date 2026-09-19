@@ -1,5 +1,5 @@
 [project]
-name = "homeassistant-fitracking"
+name = "homeassistant_fitracking"
 version = "1.0.0"
 description = "Home Assistant custom integration for Fi smart GPS dog collars"
 requires-python = ">=3.12"

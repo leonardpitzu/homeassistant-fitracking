@@ -4,10 +4,10 @@
   "codeowners": ["@leonardpitzu"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/leonardpitzu/homeassistant-fitracking",
+  "documentation": "https://github.com/leonardpitzu/homeassistant_fitracking",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/leonardpitzu/homeassistant-fitracking/issues",
+  "issue_tracker": "https://github.com/leonardpitzu/homeassistant_fitracking/issues",
   "requirements": ["pytryfi>=0.0.21"],
   "version": "1.0.0"
 }
