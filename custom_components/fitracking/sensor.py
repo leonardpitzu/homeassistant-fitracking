@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
 
-from .const import DOMAIN, SENSOR_STATS_BY_TIME, SENSOR_STATS_BY_TYPE
+from .const import BEHAVIOR_META, DOMAIN, SENSOR_STATS_BY_TIME, SENSOR_STATS_BY_TYPE
 
 LOGGER = logging.getLogger(__name__)
 
@@ -96,6 +96,10 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
                 "Connected To",
             ):
                 new_devices.append(PetGenericSensor(hass, pet, coordinator, generic))
+            for behavior in BEHAVIOR_META:
+                new_devices.append(
+                    PetBehaviorSensor(hass, pet, coordinator, behavior)
+                )
         except Exception:
             # One malformed pet must not block registration for the others.
             LOGGER.exception(
@@ -252,6 +256,64 @@ class PetGenericSensor(CoordinatorEntity, SensorEntity):
             "model": self.pet.breed,
             "sw_version": self.pet.device.buildId,
         }
+
+class PetBehaviorSensor(CoordinatorEntity, SensorEntity):
+    """Count of Fi-detected behaviour events today, with their times attached."""
+
+    # Resets to 0 at local midnight, which total_increasing handles. Fi has been
+    # seen reclassifying rest data after the fact; if a count ever drops mid-day
+    # this should become MEASUREMENT.
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "events"
+
+    def __init__(self, hass, pet, coordinator, behavior):
+        self._hass = hass
+        self._petId = pet.petId
+        self._behavior = behavior
+        super().__init__(coordinator)
+
+    @property
+    def pet(self):
+        return self.coordinator.data.getPet(self._petId)
+
+    @property
+    def _events(self):
+        return self.coordinator.behavior.get(self._petId, {}).get(self._behavior, [])
+
+    @property
+    def name(self):
+        return f"{self.pet.name} {BEHAVIOR_META[self._behavior]['name']}"
+
+    @property
+    def unique_id(self):
+        return f"{self._petId}-behavior-{self._behavior}"
+
+    @property
+    def icon(self):
+        return BEHAVIOR_META[self._behavior]["icon"]
+
+    @property
+    def native_value(self):
+        return len(self._events)
+
+    @property
+    def extra_state_attributes(self):
+        events = self._events
+        return {
+            "events": [event.isoformat() for event in events],
+            "last_event": events[-1].isoformat() if events else None,
+        }
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.pet.petId)},
+            "name": self.pet.name,
+            "manufacturer": "Fi",
+            "model": self.pet.breed,
+            "sw_version": self.pet.device.buildId,
+        }
+
 
 class PetStatsSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Sensor."""

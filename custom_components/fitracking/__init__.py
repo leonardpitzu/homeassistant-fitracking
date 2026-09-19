@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 from pytryfi import PyTryFi
 
+from .behavior import fetch_behavior_events
 from .const import (
     CONF_POLLING_RATE,
     DEFAULT_POLLING_RATE,
@@ -92,6 +93,7 @@ class FiDataUpdateCoordinator(DataUpdateCoordinator):
         self._fitracking = fitracking
         self._hass = hass
         self._pollingRate = int(pollingRate)
+        self._behavior = {}
         super().__init__(
             hass,
             LOGGER,
@@ -104,8 +106,26 @@ class FiDataUpdateCoordinator(DataUpdateCoordinator):
         return self._fitracking
 
     @property
+    def behavior(self):
+        """{petId: {behaviour key: [event datetimes]}} for today."""
+        return self._behavior
+
+    @property
     def pollingRate(self):
         return self._pollingRate
+
+    def _fetch_behavior(self):
+        """Behaviour trends are a separate query; keep last good on failure."""
+        events = {}
+        for pet in self.fitracking.pets:
+            try:
+                events[pet.petId] = fetch_behavior_events(
+                    self.fitracking.session, pet.petId
+                )
+            except Exception:
+                LOGGER.exception("Behaviour trends unavailable for pet %s", pet.petId)
+                events[pet.petId] = self._behavior.get(pet.petId, {})
+        return events
 
     async def _async_update_data(self):
         """Update data via library."""
@@ -114,4 +134,5 @@ class FiDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as error:
             LOGGER.error("Error updating Fi data\n{error}")
             raise UpdateFailed(error) from error
+        self._behavior = await self._hass.async_add_executor_job(self._fetch_behavior)
         return self.fitracking
